@@ -108,6 +108,7 @@ local EN = {
     ["Призматическая аврора"] = "Prismatic Aurora", ["Эффекты окружения"] = "ENVIRONMENT EFFECTS",
     ["Плавные переходы"] = "Smooth transitions", ["Эффекты отключены"] = "Effects disabled",
     ["Поиск недоступен в этой среде"] = "Search is unavailable in this client; enter an audio ID",
+    ["Сила реверберации"] = "Reverb strength", ["Мягкий"] = "Soft", ["Пики"] = "Peaks", ["Спектр"] = "Spectrum",
 }
 
 
@@ -264,40 +265,35 @@ local blurOn = true
 local skelLayer = __AuraFixUtil.new("Frame", {Name = "ESP", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1)}, gui)
 
 local toastF, toastToken = nil, 0
-function __AuraFixUtil.toast(text, col)
-    text = T(text)
-    toastToken = toastToken + 1
+function __AuraFixUtil.toast(message, col)
+    local messageText = tostring(T(message) or message or "")
+    toastToken += 1
     local myToken = toastToken
-    if toastF then
-        local old = toastF
-        toastF = nil
-        pcall(function()
-            TS:Create(old, TweenInfo.new(.16, EASE.Quint, DIR.In), {Position = UDim2.new(.5, 0, 0, -54), GroupTransparency = 1}):Play()
-            task.delay(.18, function() if old and old.Parent then old:Destroy() end end)
-        end)
-    end
-    local measured = TextService:GetTextSize(tostring(text), 13, Enum.Font.GothamMedium, Vector2.new(460, 28))
-    local toastWidth = math.clamp(measured.X + 62, 150, math.max(150, math.min(480, (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X or 520) - 24)))
-    local f = __AuraFixUtil.new("CanvasGroup", {Name = "AuraToast", AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, 0, -58),
-        Size = UDim2.fromOffset(toastWidth, 38), AutomaticSize = Enum.AutomaticSize.None, BackgroundColor3 = C.bar, GroupTransparency = 1, ZIndex = 20}, gui)
+    if toastF and toastF.Parent then pcall(function() toastF:Destroy() end) end
+    local camera = workspace.CurrentCamera
+    local maxWidth = math.max(180, math.min(460, (camera and camera.ViewportSize.X or 520) - 24))
+    local measured = TextService:GetTextSize(messageText, 14, Enum.Font.GothamMedium, Vector2.new(maxWidth - 56, 80))
+    local width = math.clamp(measured.X + 58, 180, maxWidth)
+    local height = math.clamp(measured.Y + 20, 42, 76)
+    local f = __AuraFixUtil.new("TextLabel", {
+        Name = "AuraToast", AnchorPoint = Vector2.new(.5, 0),
+        Position = UDim2.new(.5, 0, 0, -height - 8), Size = UDim2.fromOffset(width, height),
+        BackgroundColor3 = C.bar, BackgroundTransparency = .04, BorderSizePixel = 0,
+        Text = messageText, TextColor3 = C.text, TextSize = 14, Font = Enum.Font.GothamMedium,
+        TextWrapped = true, TextTruncate = Enum.TextTruncate.None,
+        TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 250, Visible = true,
+    }, gui)
     toastF = f
-    __AuraFixUtil.round(f, 19)
-    __AuraFixUtil.stroke(f, 1.5, col or accent, .18)
-    __AuraFixUtil.new("UIGradient", {Rotation = 0, Color = ColorSequence.new(C.bar, C.card2)}, f)
-    __AuraFixUtil.new("UIPadding", {PaddingLeft = UDim.new(0, 34), PaddingRight = UDim.new(0, 20)}, f)
-    local dot = __AuraFixUtil.new("Frame", {AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(0, -17, .5, 0), Size = UDim2.fromOffset(8, 8),
-        BackgroundColor3 = col or accent, ZIndex = 21}, f)
-    __AuraFixUtil.round(dot, 4)
-    TS:Create(dot, TweenInfo.new(.7, EASE.Sine, DIR.InOut, -1, true), {Size = UDim2.fromOffset(11, 11), BackgroundTransparency = .25}):Play()
-    __AuraFixUtil.new("TextLabel", {BackgroundTransparency = 1, Text = tostring(text), TextSize = 13, TextColor3 = C.text, Font = Enum.Font.GothamMedium,
-        TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = false, TextTruncate = Enum.TextTruncate.AtEnd,
-        Position = UDim2.fromOffset(30, 0), Size = UDim2.new(1, -42, 1, 0), AutomaticSize = Enum.AutomaticSize.None, ZIndex = 21}, f)
-    TS:Create(f, TweenInfo.new(.72, EASE.Back, DIR.Out), {Position = UDim2.new(.5, 0, 0, 14), GroupTransparency = 0}):Play()
-    task.delay(2.6, function()
+    __AuraFixUtil.round(f, 14)
+    __AuraFixUtil.stroke(f, 1.5, col or accent, .12)
+    local scale = __AuraFixUtil.new("UIScale", {Scale = .92}, f)
+    TS:Create(f, TweenInfo.new(.32, EASE.Quint, DIR.Out), {Position = UDim2.new(.5, 0, 0, 14)}):Play()
+    TS:Create(scale, TweenInfo.new(.34, EASE.Back, DIR.Out), {Scale = 1}):Play()
+    task.delay(2.8, function()
         if f.Parent and myToken == toastToken then
-            local out = TS:Create(f, TweenInfo.new(.55, EASE.Quint, DIR.In), {Position = UDim2.new(.5, 0, 0, -60), GroupTransparency = 1})
-            out:Play()
-            out.Completed:Connect(function() if f.Parent then f:Destroy() end; if toastF == f then toastF = nil end end)
+            TS:Create(f, TweenInfo.new(.28, EASE.Quint, DIR.In), {Position = UDim2.new(.5, 0, 0, -height - 8), TextTransparency = 1, BackgroundTransparency = 1}):Play()
+            task.delay(.32, function() if f.Parent then f:Destroy() end; if toastF == f then toastF = nil end end)
         end
     end)
 end
@@ -403,9 +399,12 @@ cn(closeB.MouseLeave, function() tw(closeB, {BackgroundColor3 = C.card2}, .25) e
 __AuraFixUtil.drag(top, holder, function(W, H) return 40, W - 40, 0, H - 40 end)
 
 local side = __AuraFixUtil.new("Frame", {Position = UDim2.fromOffset(6, TOP + 8), Size = UDim2.new(0, SB, 1, -TOP - 14), BackgroundTransparency = 1}, main)
-__AuraFixUtil.new("Frame", {Position = UDim2.fromOffset(SB + 7, TOP + 14), Size = UDim2.new(0, 1, 1, -TOP - 28), BackgroundColor3 = WHITE, BackgroundTransparency = .92}, main)
+local sideDivider = __AuraFixUtil.new("Frame", {Position = UDim2.fromOffset(SB + 7, TOP + 14), Size = UDim2.new(0, 1, 1, -TOP - 28), BackgroundColor3 = WHITE, BackgroundTransparency = .92}, main)
 local CPOS = UDim2.fromOffset(SB + 12, TOP + 8)
 local content = __AuraFixUtil.new("CanvasGroup", {Position = CPOS, Size = UDim2.new(1, -SB - 18, 1, -TOP - 14), BackgroundTransparency = 1}, main)
+local isCollapsed, collapseToken = false, 0
+local fullMainSize = UDim2.fromScale(1, 1)
+local collapsedMainSize = UDim2.new(1, 0, 0, TOP)
 
 function __AuraFixUtil.setOpen(v)
     if opened == v then return end
@@ -413,6 +412,16 @@ function __AuraFixUtil.setOpen(v)
     local my = openTok
     local resting = UDim2.fromScale(.5, 0)
     if v then
+        if isCollapsed then
+            isCollapsed = false
+            collapseToken += 1
+            colB.Text = "–"
+            main.Size = fullMainSize
+            content.Visible = true
+            content.GroupTransparency = 0
+            side.Visible = true
+            sideDivider.Visible = true
+        end
         main.Visible = true
         main.Position = resting + UDim2.fromOffset(0, 22)
         main.Rotation = -2.2
@@ -429,24 +438,37 @@ function __AuraFixUtil.setOpen(v)
     end
 end
 cn(closeB.Activated, function() __AuraFixUtil.setOpen(false) end)
+
+-- The minus button minimizes the window to its title bar; it does not close it.
+local function setCollapsed(value)
+    if isCollapsed == value then return end
+    isCollapsed = value
+    collapseToken += 1
+    local token = collapseToken
+    colB.Text = value and "+" or "–"
+    if value then
+        -- Fade the content slightly before clipping it to the title bar.
+        tw(content, {GroupTransparency = 1}, .14, EASE.Sine)
+        tw(main, {Size = collapsedMainSize}, .32, EASE.Quint, DIR.Out)
+        task.delay(.16, function()
+            if collapseToken == token and isCollapsed then
+                content.Visible = false
+                side.Visible = false
+                sideDivider.Visible = false
+            end
+        end)
+    else
+        content.Visible = true
+        side.Visible = true
+        sideDivider.Visible = true
+        content.GroupTransparency = 1
+        tw(main, {Size = fullMainSize}, .38, EASE.Back, DIR.Out)
+        tw(content, {GroupTransparency = 0}, .3, EASE.Quint, DIR.Out)
+    end
+end
 cn(colB.Activated, function()
     if not opened then return end
-    opened = false; openTok += 1
-    local my = openTok
-    local camera = workspace.CurrentCamera
-    local targetPos = UDim2.new(0, 14, .5, -23)
-    local targetScale = math.max(.12, baseScale * .2)
-    tw(blur, {Size = 0}, .42, EASE.Sine)
-    tw(main, {GroupTransparency = 1, Position = targetPos, Rotation = 8}, .48, EASE.Quint, DIR.In)
-    tw(mscale, {Scale = targetScale}, .48, EASE.Quint, DIR.In)
-    task.delay(.5, function()
-        if openTok == my then
-            main.Visible = false
-            main.Position = UDim2.fromScale(.5, 0)
-            main.Rotation = 0
-            mscale.Scale = baseScale
-        end
-    end)
+    setCollapsed(not isCollapsed)
 end)
 
 local fab = __AuraFixUtil.new("TextButton", {Text = "A", Font = Enum.Font.GothamBlack, TextSize = 20, TextColor3 = WHITE,
@@ -1273,7 +1295,7 @@ function __AuraFix_renderQueue()
 	if count == 0 then
 		local empty = __AuraFixUtil.new("Frame", {Size = UDim2.new(1, 0, 0, 28), BackgroundColor3 = C.card3, BackgroundTransparency = .2}, queueList)
 		__AuraFixUtil.round(empty, 7)
-		__AuraFixUtil.lbl(empty, T("Очередь пуста"), 11, C.sub, {Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -20, 1, 0)})
+		__AuraFixUtil.lbl(empty, "Очередь пуста", 11, C.sub, {Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -20, 1, 0)})
 		return
 	end
 	for index, item in ipairs(queueItems) do
@@ -1674,102 +1696,7 @@ end
 
 -- Ambient effects are authored with native Roblox parts, Trails and Tweens.
 -- This keeps them self-contained: no remote code or external model requires.
-__AuraFix_ambientFolder = Instance.new("Folder")
-__AuraFix_ambientFolder.Name = "AuraAmbientFX"
-__AuraFix_ambientFolder.Parent = workspace
-local ambientMode, ambientClock, ambientSerial = "off", 0, 0
-local ambientColors = {
-    meteor = Color3.fromRGB(255, 145, 92), comet = Color3.fromRGB(120, 220, 255),
-    shooting = Color3.fromRGB(240, 245, 255), birds = Color3.fromRGB(35, 40, 58),
-    stardust = Color3.fromRGB(180, 155, 255), fireflies = Color3.fromRGB(125, 255, 170),
-    petals = Color3.fromRGB(255, 145, 205), snow = Color3.fromRGB(205, 235, 255),
-    aurora = Color3.fromRGB(100, 255, 210), sparkles = Color3.fromRGB(255, 220, 140),
-}
-function __AuraFixUtil.setAmbientEffect(mode)
-    ambientMode = mode or "off"
-    ambientClock = 0
-    local nightEffects = {meteor = true, comet = true, shooting = true, stardust = true, aurora = true, fireflies = true}
-    if nightEffects[ambientMode] then
-        pcall(function() TS:Create(Lighting, TweenInfo.new(1.1, EASE.Sine, DIR.Out), {ClockTime = 0.15}):Play() end)
-    elseif ambientMode == "off" and not (envOn and envPreset ~= 0) then
-        pcall(function() TS:Create(Lighting, TweenInfo.new(1.1, EASE.Sine, DIR.Out), {ClockTime = envLightingBase.ClockTime}):Play() end)
-    end
-    if __AuraFix_ambientFolder and __AuraFix_ambientFolder.Parent then
-        for _, child in ipairs(__AuraFix_ambientFolder:GetChildren()) do pcall(function() child:Destroy() end) end
-    end
-    __AuraFixUtil.toast(ambientMode == "off" and "Атмосферные детали выключены" or ("Эффект окружения: " .. (ambientMode == "meteor" and "Метеоры" or ambientMode == "comet" and "Кометы" or ambientMode == "shooting" and "Падающие звёзды" or ambientMode == "birds" and "Птицы" or ambientMode == "stardust" and "Звёздная пыль" or ambientMode == "fireflies" and "Светлячки" or ambientMode == "petals" and "Лепестки" or ambientMode == "snow" and "Снег" or ambientMode == "aurora" and "Аврора-пылинки" or "Искры")), C.good)
-end
-function __AuraFixUtil.spawnAmbientEffect(mode)
-    local camera = workspace.CurrentCamera
-    if not camera or not __AuraFix_ambientFolder or not __AuraFix_ambientFolder.Parent then return end
-    ambientSerial += 1
-    local color = ambientColors[mode] or WHITE
-    local cf = camera.CFrame
-    local sx = math.random(-42, 42)
-    local sy = math.random(5, 30)
-    local sz = -math.random(55, 100)
-    local startPos = (cf * CFrame.new(sx, sy, sz)).Position
-    local finishPos = startPos + cf.RightVector * math.random(-70, 70) + cf.UpVector * math.random(-35, 20) + cf.LookVector * math.random(35, 85)
-    if mode == "birds" then
-        local birdSize = math.random(6, 12) / 10
-        local bird = Instance.new("Model")
-        bird.Name = "AuraBird" .. ambientSerial
-        bird.Parent = __AuraFix_ambientFolder
-        for wing = 1, 2 do
-            local part = Instance.new("Part")
-            part.Name = "Wing"
-            part.Anchored, part.CanCollide, part.CanTouch, part.CanQuery = true, false, false, false
-            part.Material, part.Color = Enum.Material.SmoothPlastic, color
-            part.Size = Vector3.new(.09, .07, birdSize)
-            part.CFrame = CFrame.lookAt(startPos, finishPos) * CFrame.new(wing == 1 and -.24 or .24, 0, 0) * CFrame.Angles(0, 0, math.rad(wing == 1 and -32 or 32))
-            part.Parent = bird
-            TS:Create(part, TweenInfo.new(math.random(5, 8), Enum.EasingStyle.Linear), {Position = finishPos + Vector3.new(0, math.random(-2, 2), 0)}):Play()
-        end
-        task.delay(8.5, function() if bird.Parent then bird:Destroy() end end)
-        return
-    end
-    local part = Instance.new("Part")
-    part.Name = "Aura" .. mode .. ambientSerial
-    part.Anchored, part.CanCollide, part.CanTouch, part.CanQuery = true, false, false, false
-    part.CastShadow = false
-    part.Material = (mode == "birds") and Enum.Material.SmoothPlastic or Enum.Material.Neon
-    part.Color = color
-    part.Shape = Enum.PartType.Ball
-    local size = mode == "meteor" and 2.1 or mode == "comet" and 2.8 or mode == "shooting" and .9 or mode == "snow" and .28 or mode == "petals" and .42 or mode == "fireflies" and .28 or .26
-    part.Size = Vector3.new(size, size, size)
-    part.CFrame = CFrame.new(startPos)
-    part.Transparency = mode == "stardust" and .22 or 0
-    part.Parent = __AuraFix_ambientFolder
-    if mode == "meteor" or mode == "comet" or mode == "shooting" or mode == "aurora" then
-        local a0 = Instance.new("Attachment", part)
-        a0.Position = Vector3.new(0, 0, size * .4)
-        local a1 = Instance.new("Attachment", part)
-        a1.Position = Vector3.new(0, 0, -size * 1.2)
-        local trail = Instance.new("Trail")
-        trail.Name = "AuraGlowTrail"
-        trail.Attachment0, trail.Attachment1 = a0, a1
-        trail.Color = ColorSequence.new(color:Lerp(WHITE, .45), color)
-        trail.LightEmission = 1
-        trail.FaceCamera = true
-        trail.Lifetime = mode == "comet" and 1.25 or mode == "meteor" and .85 or .55
-        trail.MinLength = .05
-        trail.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, .05), NumberSequenceKeypoint.new(1, 1)})
-        trail.WidthScale = NumberSequence.new({NumberSequenceKeypoint.new(0, mode == "comet" and 1.65 or mode == "meteor" and 1.25 or .8), NumberSequenceKeypoint.new(1, 0)})
-        trail.Parent = part
-    end
-    local duration = mode == "meteor" and 1.15 or mode == "comet" and 2.4 or mode == "shooting" and .72 or mode == "snow" and 5.5 or mode == "petals" and 4.5 or mode == "fireflies" and 2.8 or mode == "aurora" and 2.2 or 1.8
-    local goal = {Position = finishPos, Transparency = 1, Size = part.Size * (mode == "fireflies" and 1.35 or .72)}
-    if mode == "snow" then goal.Position = startPos - Vector3.new(0, math.random(12, 26), 0) + cf.RightVector * math.random(-15, 15) end
-    if mode == "petals" then goal.Position = finishPos - Vector3.new(0, math.random(2, 8), 0) end
-    if mode == "fireflies" or mode == "stardust" or mode == "sparkles" then
-        part.Material = Enum.Material.Neon
-        TS:Create(part, TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 1, true), {Transparency = .7, Size = part.Size * 1.7}):Play()
-        task.delay(duration * 2 + .15, function() if part.Parent then part:Destroy() end end)
-    else
-        TS:Create(part, TweenInfo.new(duration, Enum.EasingStyle.Linear), goal):Play()
-        task.delay(duration + .15, function() if part.Parent then part:Destroy() end end)
-    end
-end
+-- Atmospheric particle effects (meteors, aurora dust, snow, etc.) have been removed.
 
 __AuraFix_pv = __AuraFixUtil.page("Визуал")
 __AuraFixUtil.section(__AuraFix_pv, "ОТОБРАЖЕНИЕ")
@@ -1789,24 +1716,6 @@ __AuraFixUtil.slider(__AuraFix_pv, "Яркость ESP", 25, 100, 100, function(
 __AuraFixUtil.slider(__AuraFix_pv, "Размер подписей", 10, 18, 13, function(v) return string.format("%d px", v) end, function(v) V.labelSize = v end, 1, "labelSize")
 __AuraFixUtil.slider(__AuraFix_pv, "Толщина рамки", 1, 4, 1.5, function(v) return string.format("%.1f px", v) end, function(v) V.lineWidth = v end, .5, "lineWidth")
 __AuraFixUtil.slider(__AuraFix_pv, "Толщина скелета", 1, 4, 1.5, function(v) return string.format("%.1f px", v) end, function(v) V.skelWidth = v end, .5, "skelWidth")
-    -- Local ambient details; the unreliable sky/color preset panel is removed.
-    __AuraFixUtil.section(__AuraFix_pv, "АТМОСФЕРНЫЕ ДЕТАЛИ")
-    __AuraFixUtil.lbl(__AuraFix_pv, "Локальные декоративные эффекты", 10, C.sub, {Size = UDim2.new(1, 0, 0, 24), TextWrapped = true})
-    local ambientRows = {}
-    for i = 1, 4 do ambientRows[i] = __AuraFixUtil.row(__AuraFix_pv, 30) end
-    local ambientButtonSize = UDim2.new(1/3, -4, 1, 0)
-    local ambientOptions = {
-        {"Выкл.", "off"}, {"Метеоры", "meteor"}, {"Кометы", "comet"},
-        {"Падающие звёзды", "shooting"}, {"Птицы", "birds"}, {"Звёздная пыль", "stardust"},
-        {"Светлячки", "fireflies"}, {"Лепестки", "petals"}, {"Снег", "snow"},
-        {"Аврора-пылинки", "aurora"}, {"Искры", "sparkles"},
-    }
-    for i, option in ipairs(ambientOptions) do
-        local rowIndex = math.floor((i - 1) / 3) + 1
-        __AuraFixUtil.button(ambientRows[rowIndex], option[1], function()
-            __AuraFixUtil.setAmbientEffect(option[2])
-        end, false, ambientButtonSize)
-    end
 __AuraFix_espActions = __AuraFixUtil.row(__AuraFix_pv, 32)
 __AuraFixUtil.button(__AuraFix_espActions, "Всё включить", function()
 	for _, key in ipairs({"hl", "box", "health", "tracers", "skel", "names", "dist", "healthText"}) do
@@ -2036,14 +1945,7 @@ RS:BindToRenderStep("AuraMenuLoop", Enum.RenderPriority.Camera.Value + 1, functi
 			tw(fpsAura, {BackgroundColor3 = statusColor}, .24, EASE.Sine)
 		end
 	end
-    if ambientMode ~= "off" then
-        ambientClock += dt
-        local interval = ambientMode == "meteor" and 1.7 or ambientMode == "comet" and 2.8 or ambientMode == "shooting" and .95 or ambientMode == "birds" and 2.7 or ambientMode == "stardust" and .2 or ambientMode == "fireflies" and .32 or ambientMode == "petals" and .38 or ambientMode == "snow" and .16 or ambientMode == "aurora" and .28 or .24
-        if ambientClock >= interval then
-            ambientClock = 0
-            if #__AuraFix_ambientFolder:GetChildren() < 64 then __AuraFixUtil.spawnAmbientEffect(ambientMode) end
-        end
-    end
+
 	local playing = sound.IsPlaying
     -- PlaybackLoudness is Roblox's available client-side amplitude meter (not a true FFT).
     local rawLoud = playing and math.clamp(sound.PlaybackLoudness / 420, 0, 1) or 0
