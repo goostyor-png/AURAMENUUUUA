@@ -8,6 +8,7 @@ local MPS = game:GetService("MarketplaceService")
 local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
 local GuiService = game:GetService("GuiService")
+local TextService = game:GetService("TextService")
 local TeleportService = game:GetService("TeleportService")
 local Stats = game:GetService("Stats")
 local okVU, VU = pcall(game.GetService, game, "VirtualUser")
@@ -55,7 +56,7 @@ local EN = {
 	["Тональность"] = "Pitch", ["пт"] = "st", ["ГРОМКОСТЬ"] = "VOLUME", ["Усиление"] = "Gain", ["Сбросить всё"] = "Reset all",
 	["ПРЕСЕТЫ"] = "PRESETS", ["Сброс"] = "Reset", ["ЭКВАЛАЙЗЕР"] = "EQUALIZER", ["Низкие"] = "Low", ["Средние"] = "Mid",
 	["Высокие"] = "High", ["ПРОСТРАНСТВО"] = "SPACE", ["Реверберация"] = "Reverb", ["Эхо"] = "Echo",
-	["Чистый вокал"] = "Clear Vocals", ["Клуб"] = "Club", ["Кино"] = "Cinematic", ["Радио"] = "Radio", ["Тёплый"] = "Warm", ["Яркий звук"] = "Bright Sound", ["Больше пространства"] = "Wide Space", ["Эхо-задержка"] = "Echo delay", ["Обратная связь эха"] = "Echo feedback", ["Длина реверберации"] = "Reverb decay", ["Сброс аудио"] = "Reset audio", ["ВЫРАЗИТЕЛЬНОСТЬ ЗВУКА"] = "SOUND SHAPING", ["НАСТРОЙКИ ПРОСТРАНСТВА"] = "SPACE SETTINGS",
+	["Клуб"] = "Club", ["Кино"] = "Cinematic", ["Радио"] = "Radio", ["Тёплый"] = "Warm", ["Яркий звук"] = "Bright Sound", ["Больше пространства"] = "Wide Space", ["Эхо-задержка"] = "Echo delay", ["Обратная связь эха"] = "Echo feedback", ["Длина реверберации"] = "Reverb decay", ["Сброс аудио"] = "Reset audio", ["ВЫРАЗИТЕЛЬНОСТЬ ЗВУКА"] = "SOUND SHAPING", ["НАСТРОЙКИ ПРОСТРАНСТВА"] = "SPACE SETTINGS",
 	["ОТОБРАЖЕНИЕ"] = "DISPLAY", ["Подсветка игроков"] = "Player highlight", ["Скелет"] = "Skeleton", ["Имена"] = "Names",
 	["Дистанция"] = "Distance", ["Дальность"] = "Range", ["Стиль"] = "Style", ["Контур"] = "Outline", ["Заливка"] = "Fill",
 	["Градиент"] = "Gradient", ["ст."] = "studs", ["ОБЩЕЕ"] = "GENERAL", ["Анти-АФК"] = "Anti-AFK", ["Показывать FPS"] = "Show FPS",
@@ -275,8 +276,10 @@ function __AuraFixUtil.toast(text, col)
             task.delay(.18, function() if old and old.Parent then old:Destroy() end end)
         end)
     end
+    local measured = TextService:GetTextSize(tostring(text), 13, Enum.Font.GothamMedium, Vector2.new(460, 28))
+    local toastWidth = math.clamp(measured.X + 62, 150, math.max(150, math.min(480, (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X or 520) - 24)))
     local f = __AuraFixUtil.new("CanvasGroup", {Name = "AuraToast", AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, 0, -58),
-        Size = UDim2.fromOffset(0, 38), AutomaticSize = Enum.AutomaticSize.X, BackgroundColor3 = C.bar, GroupTransparency = 1, ZIndex = 20}, gui)
+        Size = UDim2.fromOffset(toastWidth, 38), AutomaticSize = Enum.AutomaticSize.None, BackgroundColor3 = C.bar, GroupTransparency = 1, ZIndex = 20}, gui)
     toastF = f
     __AuraFixUtil.round(f, 19)
     __AuraFixUtil.stroke(f, 1.5, col or accent, .18)
@@ -286,8 +289,9 @@ function __AuraFixUtil.toast(text, col)
         BackgroundColor3 = col or accent, ZIndex = 21}, f)
     __AuraFixUtil.round(dot, 4)
     TS:Create(dot, TweenInfo.new(.7, EASE.Sine, DIR.InOut, -1, true), {Size = UDim2.fromOffset(11, 11), BackgroundTransparency = .25}):Play()
-    __AuraFixUtil.new("TextLabel", {BackgroundTransparency = 1, Text = text, TextSize = 13, TextColor3 = C.text, Font = Enum.Font.GothamMedium,
-        Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, ZIndex = 21}, f)
+    __AuraFixUtil.new("TextLabel", {BackgroundTransparency = 1, Text = tostring(text), TextSize = 13, TextColor3 = C.text, Font = Enum.Font.GothamMedium,
+        TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = false, TextTruncate = Enum.TextTruncate.AtEnd,
+        Position = UDim2.fromOffset(30, 0), Size = UDim2.new(1, -42, 1, 0), AutomaticSize = Enum.AutomaticSize.None, ZIndex = 21}, f)
     TS:Create(f, TweenInfo.new(.72, EASE.Back, DIR.Out), {Position = UDim2.new(.5, 0, 0, 14), GroupTransparency = 0}):Play()
     task.delay(2.6, function()
         if f.Parent and myToken == toastToken then
@@ -425,7 +429,25 @@ function __AuraFixUtil.setOpen(v)
     end
 end
 cn(closeB.Activated, function() __AuraFixUtil.setOpen(false) end)
-cn(colB.Activated, function() __AuraFixUtil.setOpen(false) end)
+cn(colB.Activated, function()
+    if not opened then return end
+    opened = false; openTok += 1
+    local my = openTok
+    local camera = workspace.CurrentCamera
+    local targetPos = UDim2.new(0, 14, .5, -23)
+    local targetScale = math.max(.12, baseScale * .2)
+    tw(blur, {Size = 0}, .42, EASE.Sine)
+    tw(main, {GroupTransparency = 1, Position = targetPos, Rotation = 8}, .48, EASE.Quint, DIR.In)
+    tw(mscale, {Scale = targetScale}, .48, EASE.Quint, DIR.In)
+    task.delay(.5, function()
+        if openTok == my then
+            main.Visible = false
+            main.Position = UDim2.fromScale(.5, 0)
+            main.Rotation = 0
+            mscale.Scale = baseScale
+        end
+    end)
+end)
 
 local fab = __AuraFixUtil.new("TextButton", {Text = "A", Font = Enum.Font.GothamBlack, TextSize = 20, TextColor3 = WHITE,
 	AutoButtonColor = false, Size = UDim2.fromOffset(46, 46), Position = UDim2.new(0, 14, .5, -23)}, gui)
@@ -1367,7 +1389,6 @@ __AuraFixUtil.button(__AuraFix_pr, "Ночной", __AuraFix_preset("Ночно�
 __AuraFixUtil.button(__AuraFix_pr, "Замедленный", __AuraFix_preset("Замедленный", function() spd.Set(.78); tapeT.Set(true); bassS.Set(3); midS.Set(0); trebS.Set(-2); reverbT.Set(true); reverb.DecayTime = 3.5; reverb.WetLevel = -5 end), false, __AuraFix_q)
 __AuraFixUtil.button(__AuraFix_pr, "Бас", __AuraFix_preset("Бас", function() bassS.Set(10); midS.Set(-4); trebS.Set(2); reverbT.Set(false); echoT.Set(false) end), false, __AuraFix_q)
 __AuraFix_pr2 = __AuraFixUtil.row(__AuraFix_pe, 30)
-__AuraFixUtil.button(__AuraFix_pr2, "Чистый вокал", __AuraFix_preset("Чистый вокал", function() spd.Set(1); tapeT.Set(false); bassS.Set(-3); midS.Set(5); trebS.Set(3); reverbT.Set(false); echoT.Set(false) end), false, __AuraFix_q)
 __AuraFixUtil.button(__AuraFix_pr2, "Клуб", __AuraFix_preset("Клуб", function() spd.Set(1.02); tapeT.Set(false); bassS.Set(8); midS.Set(1); trebS.Set(5); reverbT.Set(true); reverb.WetLevel = -10; echoT.Set(true); echo.Delay = .22; echo.Feedback = .28; echo.WetLevel = -9 end), false, __AuraFix_q)
 __AuraFixUtil.button(__AuraFix_pr2, "Радио", __AuraFix_preset("Радио", function() spd.Set(1); tapeT.Set(false); bassS.Set(-8); midS.Set(5); trebS.Set(-5); reverbT.Set(false); echoT.Set(false) end), false, __AuraFix_q)
 __AuraFix_pr3 = __AuraFixUtil.row(__AuraFix_pe, 30)
@@ -1667,6 +1688,12 @@ local ambientColors = {
 function __AuraFixUtil.setAmbientEffect(mode)
     ambientMode = mode or "off"
     ambientClock = 0
+    local nightEffects = {meteor = true, comet = true, shooting = true, stardust = true, aurora = true, fireflies = true}
+    if nightEffects[ambientMode] then
+        pcall(function() TS:Create(Lighting, TweenInfo.new(1.1, EASE.Sine, DIR.Out), {ClockTime = 0.15}):Play() end)
+    elseif ambientMode == "off" and not (envOn and envPreset ~= 0) then
+        pcall(function() TS:Create(Lighting, TweenInfo.new(1.1, EASE.Sine, DIR.Out), {ClockTime = envLightingBase.ClockTime}):Play() end)
+    end
     if __AuraFix_ambientFolder and __AuraFix_ambientFolder.Parent then
         for _, child in ipairs(__AuraFix_ambientFolder:GetChildren()) do pcall(function() child:Destroy() end) end
     end
