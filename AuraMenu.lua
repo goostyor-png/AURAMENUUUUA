@@ -14,6 +14,12 @@ local Stats = game:GetService("Stats")
 local okVU, VU = pcall(game.GetService, game, "VirtualUser")
 
 local lp = Players.LocalPlayer
+local aquaAntiFling = false
+local aquaThreshold = 95
+local aquaLastSafeCFrame = nil
+local aquaLastSafeAt = 0
+local aquaProtectionConn
+local aquaLastToastAt = 0
 local pgui = lp:WaitForChild("PlayerGui")
 local genv = (getgenv and getgenv()) or _G
 if genv.AuraUnload then pcall(genv.AuraUnload) end
@@ -448,13 +454,16 @@ local function setCollapsed(value)
     colB.Text = value and "+" or "–"
     if value then
         -- Fade the content slightly before clipping it to the title bar.
-        tw(content, {GroupTransparency = 1}, .14, EASE.Sine)
-        tw(main, {Size = collapsedMainSize}, .32, EASE.Quint, DIR.Out)
-        task.delay(.16, function()
+        tw(content, {GroupTransparency = 1, Position = CPOS + UDim2.fromOffset(0, 10)}, .22, EASE.Quint, DIR.In)
+        tw(main, {Size = collapsedMainSize}, .48, EASE.Quint, DIR.Out)
+        tw(mscale, {Scale = baseScale * 1.012}, .24, EASE.Sine, DIR.Out)
+        task.delay(.24, function()
             if collapseToken == token and isCollapsed then
                 content.Visible = false
+                content.Position = CPOS
                 side.Visible = false
                 sideDivider.Visible = false
+                tw(mscale, {Scale = baseScale}, .22, EASE.Sine, DIR.Out)
             end
         end)
     else
@@ -462,8 +471,11 @@ local function setCollapsed(value)
         side.Visible = true
         sideDivider.Visible = true
         content.GroupTransparency = 1
-        tw(main, {Size = fullMainSize}, .38, EASE.Back, DIR.Out)
-        tw(content, {GroupTransparency = 0}, .3, EASE.Quint, DIR.Out)
+        main.Size = collapsedMainSize
+        tw(main, {Size = fullMainSize}, .56, EASE.Back, DIR.Out)
+        content.Position = CPOS + UDim2.fromOffset(0, 10)
+        tw(content, {GroupTransparency = 0, Position = CPOS}, .42, EASE.Quint, DIR.Out)
+        tw(mscale, {Scale = baseScale}, .42, EASE.Back, DIR.Out)
     end
 end
 cn(colB.Activated, function()
@@ -675,7 +687,7 @@ function __AuraFixUtil.segment(p, text, opts, cb, def, key)
 	return obj
 end
 
-local pages, order = {}, {"Музыка", "Эффекты", "Визуал", "Разное", "Настройки"}
+local pages, order = {}, {"Музыка", "Эффекты", "Визуал", "Разное", "Aquamarine", "Настройки"}
 function __AuraFixUtil.page(name)
 	local p = __AuraFixUtil.new("ScrollingFrame", {Name = name, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ScrollBarThickness = 3,
 		CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollingDirection = Enum.ScrollingDirection.Y,
@@ -1195,6 +1207,8 @@ local fpsA, fpsN = 0, 0
 
 local envCleanup
 function __AuraFixUtil.unload()
+    aquaAntiFling = false
+    if aquaProtectionConn then pcall(function() aquaProtectionConn:Disconnect() end); aquaProtectionConn = nil end
 	pcall(function() RS:UnbindFromRenderStep("AuraMenuLoop") end)
 	if __AuraFix_activeTweens then for _, records in pairs(__AuraFix_activeTweens) do for _, record in ipairs(records) do pcall(function() record.tween:Cancel() end) end end; table.clear(__AuraFix_activeTweens) end
 	for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
@@ -1757,6 +1771,135 @@ __AuraFixUtil.button(__AuraFix_cr, "Загрузить конфиг", function()
 	end
 end, false, __AuraFix_half)
 
+-- Aquamarine: defensive anti-fling protection. This only stabilizes the local character;
+-- it does not apply force to other players.
+local function aquaGetRoot()
+    local character = lp.Character
+    if not character then return nil end
+    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+end
+local function aquaSetProtection(enabled)
+    aquaAntiFling = enabled and true or false
+    if aquaProtectionConn then aquaProtectionConn:Disconnect(); aquaProtectionConn = nil end
+    local root = aquaGetRoot()
+    if root then aquaLastSafeCFrame = root.CFrame; aquaLastSafeAt = os.clock() end
+    if aquaAntiFling then
+        aquaProtectionConn = RS.Heartbeat:Connect(function()
+            if not aquaAntiFling then return end
+            local character = lp.Character
+            local currentRoot = aquaGetRoot()
+            local hum = character and character:FindFirstChildOfClass("Humanoid")
+            if not currentRoot or not hum or hum.Health <= 0 then return end
+            local velocity = currentRoot.AssemblyLinearVelocity
+            local angular = currentRoot.AssemblyAngularVelocity
+            local speed = velocity.Magnitude
+            local spin = angular.Magnitude
+            if speed > aquaThreshold or spin > aquaThreshold * 1.5 then
+                -- Rewind only when we have a recent safe position; otherwise dampen the impulse.
+                if aquaLastSafeCFrame and os.clock() - aquaLastSafeAt < 2.5 then
+                    pcall(function() currentRoot.CFrame = aquaLastSafeCFrame end)
+                end
+                pcall(function()
+                    currentRoot.AssemblyLinearVelocity = Vector3.zero
+                    currentRoot.AssemblyAngularVelocity = Vector3.zero
+                end)
+                if os.clock() - aquaLastToastAt > 2 then aquaLastToastAt = os.clock(); __AuraFixUtil.toast(T("Попытка флинга остановлена") .. " / Fling blocked", C.warn) end
+            elseif speed < 38 and spin < 45 and hum.FloorMaterial ~= Enum.Material.Air then
+                aquaLastSafeCFrame = currentRoot.CFrame
+                aquaLastSafeAt = os.clock()
+            end
+        end)
+    end
+end
+lp.CharacterAdded:Connect(function(character)
+    task.wait(.5)
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if root then aquaLastSafeCFrame = root.CFrame; aquaLastSafeAt = os.clock() end
+end)
+
+__AuraFix_aqua = __AuraFixUtil.page("Aquamarine")
+__AuraFixUtil.section(__AuraFix_aqua, "ЗАЩИТА ПЕРСОНАЖА / CHARACTER PROTECTION")
+__AuraFixUtil.toggle(__AuraFix_aqua, "Анти-флинг / Anti-Fling", false, function(v)
+    aquaSetProtection(v)
+    __AuraFixUtil.toast(v and "Анти-флинг включён / Anti-Fling enabled" or "Анти-флинг выключен / Anti-Fling disabled", v and C.good or C.warn)
+end, "aquaAntiFling")
+__AuraFixUtil.slider(__AuraFix_aqua, "Порог скорости / Velocity threshold", 60, 220, 95, function(v) return string.format("%d", v) end, function(v) aquaThreshold = v end, 5, "aquaThreshold")
+__AuraFixUtil.section(__AuraFix_aqua, "КАК ЭТО РАБОТАЕТ / HOW IT WORKS")
+local aquaInfo = __AuraFixUtil.card(__AuraFix_aqua, 72)
+__AuraFixUtil.lbl(aquaInfo, "Останавливает резкие импульсы и возвращает персонажа к последней безопасной позиции. Не атакует других игроков.\nStops sudden impulses and restores your last safe position.", 11, C.sub, {Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -20, 1, -12), TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Center})
+
+
+-- Visual Items: local-only mock tools. These are not real Toolbox assets and are not server-authoritative.
+__AuraFixUtil.section(__AuraFix_aqua, "VISUAL ITEMS / ВИЗУАЛЬНЫЕ ПРЕДМЕТЫ")
+local aquaItemCatalog = {"Pizza", "Bloxy Cola", "Medkit", "Taco", "Apple", "Flashlight", "Golden Key", "Magic Wand"}
+local aquaSelectedItem = nil
+local aquaSearch = __AuraFixUtil.new("TextBox", {
+    Size = UDim2.new(1, 0, 0, 36), BackgroundColor3 = C.card, TextColor3 = C.text,
+    PlaceholderColor3 = C.sub, PlaceholderText = "Название предмета / Search items...",
+    Text = "", ClearTextOnFocus = false, TextSize = 13, Font = Enum.Font.GothamMedium,
+    TextXAlignment = Enum.TextXAlignment.Left
+}, __AuraFix_aqua)
+__AuraFixUtil.round(aquaSearch, 8)
+__AuraFixUtil.new("UIPadding", {PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 8)}, aquaSearch)
+local aquaItemList = __AuraFixUtil.new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1}, __AuraFix_aqua)
+local aquaItemLayout = __AuraFixUtil.new("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder}, aquaItemList)
+local aquaSelectionLabel = __AuraFixUtil.lbl(__AuraFix_aqua, "Выбери предмет из списка / Select an item", 11, C.sub, {Size = UDim2.new(1, 0, 0, 22)})
+local aquaAddButton = __AuraFixUtil.button(__AuraFix_aqua, "Добавить в инвентарь / Add to inventory", nil, true)
+aquaAddButton.Activated:Connect(function()
+    if not aquaSelectedItem then
+        __AuraFixUtil.toast("Сначала выбери предмет / Select an item first", C.warn)
+        return
+    end
+    local backpack = lp:FindFirstChildOfClass("Backpack")
+    if not backpack then
+        __AuraFixUtil.toast("Инвентарь пока недоступен / Backpack unavailable", C.bad)
+        return
+    end
+    local existing = backpack:FindFirstChild(aquaSelectedItem)
+    if existing then
+        __AuraFixUtil.toast("Уже добавлен / Already added: " .. aquaSelectedItem, C.warn)
+        return
+    end
+    local tool = Instance.new("Tool")
+    tool.Name = aquaSelectedItem
+    tool.ToolTip = "Visual-only item (client-side)"
+    tool.RequiresHandle = true
+    local handle = Instance.new("Part")
+    handle.Name = "Handle"
+    handle.Size = Vector3.new(.7, .7, .7)
+    handle.Transparency = 1
+    handle.CanCollide = false
+    handle.Massless = true
+    handle.Parent = tool
+    tool.Parent = backpack
+    __AuraFixUtil.toast("Добавлено визуально / Added locally: " .. aquaSelectedItem, C.good)
+end)
+local function aquaRefreshItems()
+    for _, child in ipairs(aquaItemList:GetChildren()) do
+        if child ~= aquaItemLayout and child:IsA("GuiObject") then child:Destroy() end
+    end
+    local query = string.lower(aquaSearch.Text or "")
+    local count = 0
+    for _, itemName in ipairs(aquaItemCatalog) do
+        if query == "" or string.find(string.lower(itemName), query, 1, true) then
+            count += 1
+            local itemButton = __AuraFixUtil.button(aquaItemList, itemName, function()
+                aquaSelectedItem = itemName
+                aquaSelectionLabel.Text = "Выбрано / Selected: " .. itemName
+                __AuraFixUtil.toast("Выбран / Selected: " .. itemName, C.good)
+            end, false)
+            itemButton.LayoutOrder = count
+        end
+    end
+    if count == 0 then
+        local noResults = __AuraFixUtil.lbl(aquaItemList, "Ничего не найдено / No items found", 12, C.sub, {Size = UDim2.new(1, 0, 0, 28)})
+        noResults.LayoutOrder = 1
+    end
+end
+aquaSearch:GetPropertyChangedSignal("Text"):Connect(aquaRefreshItems)
+aquaRefreshItems()
+__AuraFixUtil.lbl(__AuraFix_aqua, "Это локальные заглушки: названия появятся в твоём Backpack, но настоящие модели Toolbox и серверные действия не добавляются.\\nLocal-only placeholders; real Toolbox models and server-side item ownership are not added.", 10, C.sub, {Size = UDim2.new(1, 0, 0, 42), TextWrapped = true})
+
 __AuraFix_ps = __AuraFixUtil.page("Настройки")
 __AuraFixUtil.section(__AuraFix_ps, "ЦВЕТ АКЦЕНТА")
 __AuraFix_swc = __AuraFixUtil.card(__AuraFix_ps, 46)
@@ -1874,7 +2017,7 @@ function __AuraFix_selectTab(name, instant)
 	end)
 end
 
-__AuraFix_tabGlyphs = { ["Музыка"] = "♫", ["Эффекты"] = "✦", ["Визуал"] = "◈", ["Разное"] = "◌", ["Настройки"] = "⚙" }
+__AuraFix_tabGlyphs = { ["Музыка"] = "♫", ["Эффекты"] = "✦", ["Визуал"] = "◈", ["Разное"] = "◌", ["Aquamarine"] = "◇", ["Настройки"] = "⚙" }
 for i, name in ipairs(order) do
 	local b = __AuraFixUtil.new("TextButton", {Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = C.sub, TextXAlignment = Enum.TextXAlignment.Left,
 		BackgroundTransparency = 1, AutoButtonColor = false, Position = UDim2.fromOffset(0, (i - 1) * 36), Size = UDim2.new(1, 0, 0, 32)}, side)
